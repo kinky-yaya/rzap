@@ -1,7 +1,7 @@
 use std::error;
 use std::time::Duration;
 
-use rzap_ng::api::OpenShockAPI;
+use rzap_ng::OpenShockAPI;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn error::Error>> {
@@ -10,14 +10,11 @@ async fn main() -> Result<(), Box<dyn error::Error>> {
         .next()
         .expect("This example must be passed an OpenShock API key as only argument");
 
-    let mut api = OpenShockAPI::builder(api_key)
-        .build()
-        .expect("we provided the app and api key");
+    let api = OpenShockAPI::new(api_key)?.with_user_agent("rzap example".to_string())?;
 
     let first_hub = api
         .list_owned()
-        .await
-        .unwrap()
+        .await?
         .into_iter()
         .next()
         .expect("For this example you need one hub set up");
@@ -28,9 +25,7 @@ async fn main() -> Result<(), Box<dyn error::Error>> {
         .next()
         .expect("For this example the first hub needs to have one shocker set up");
 
-    first_shocker
-        .vibrate(&mut api, 20, Duration::from_secs(2))
-        .await?;
+    first_shocker.vibrate(20, Duration::from_secs(2)).await?;
 
     Ok(())
 }

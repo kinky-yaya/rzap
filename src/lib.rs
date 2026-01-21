@@ -28,7 +28,6 @@
 //! ```
 //!
 
-pub mod api;
-pub mod api_builder;
-pub mod data_type;
-pub mod error;
+mod api;
+mod data_type;
+pub use api::{OpenShockAPI, ControlError};

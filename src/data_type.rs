@@ -37,22 +37,3 @@ pub struct BaseResponse<T> {
     pub message: Option<String>,
     pub data: Option<T>,
 }
-
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct SelfResponse {
-    pub id: String,
-    pub name: Option<String>,
-    pub email: Option<String>,
-    pub image: Option<String>,
-    pub rank: RankType,
-}
-
-#[derive(EnumString, Serialize, Deserialize, Debug, Clone, Copy, Eq, PartialEq)]
-pub enum RankType {
-    User,
-    Support,
-    Staff,
-    Admin,
-    System,
-}

@@ -1,30 +1,51 @@
-use crate::{api_builder::OpenShockAPIBuilder, data_type::*};
+use reqwest::header::InvalidHeaderValue;
+use reqwest::{Client, header};
+
+use crate::data_type::*;
 use std::fmt::Debug;
 use std::time::Duration;
 
 pub struct OpenShockAPI {
-    pub(crate) client: reqwest::Client,
-    pub(crate) base_url: String,
-    pub(crate) user_agent: String,
+    client: reqwest::Client,
+    base_url: String,
+    user_agent: String,
+    api_key: String,
 }
 
 impl OpenShockAPI {
-    /// Return a builder for the api interface
-    ///
-    /// this is the same as [`OpenShockAPIBuilder::new`]
-    pub fn builder(api_key: String) -> OpenShockAPIBuilder {
-        OpenShockAPIBuilder::new(api_key)
+    pub fn new(api_key: String) -> Result<Self, CreateApiError> {
+        let user_agent = format!("rzap/{}", env!("CARGO_PKG_VERSION"));
+        Ok(Self {
+            client: client(&user_agent, &api_key)?,
+            base_url: "https://api.openshock.app".to_string(),
+            api_key,
+            user_agent: format!("rzap/{}", env!("CARGO_PKG_VERSION")),
+        })
     }
 
-    pub async fn list_owned(&self) -> Result<Vec<Hub>, ListError> {
+    /// this is optional and can be provided to use a self-hosted instance of the OpenShock API. if
+    /// left unset, the default is (`https://api.openshock.app`).
+    pub fn with_base_url(mut self, base_url: String) -> Self {
+        self.base_url = base_url;
+        self
+    }
+
+    /// defaults is rzap/CARGO_PKG_VERSION
+    pub fn with_user_agent(mut self, user_agent: String) -> Result<Self, CreateApiError> {
+        self.client = client(&user_agent, &self.api_key)?;
+        self.user_agent = user_agent;
+        Ok(self)
+    }
+
+    pub async fn list_owned<'a>(&'a self) -> Result<Vec<Hub<'a>>, ListError> {
         self.list_inner("own").await
     }
 
-    pub async fn list_shared(&self) -> Result<Vec<Hub>, ListError> {
+    pub async fn list_shared<'a>(&'a self) -> Result<Vec<Hub<'a>>, ListError> {
         self.list_inner("shared").await
     }
 
-    async fn list_inner(&self, source: &str) -> Result<Vec<Hub>, ListError> {
+    async fn list_inner<'a>(&'a self, source: &str) -> Result<Vec<Hub<'a>>, ListError> {
         let resp = self
             .client
             .get(format!("{}/1/shockers/{}", self.base_url, source))
@@ -42,11 +63,13 @@ impl OpenShockAPI {
         let hubs = hubs
             .into_iter()
             .map(|hub| Hub {
+                _api: &self,
                 name: hub.name,
                 shockers: hub
                     .shockers
                     .into_iter()
                     .map(|s| Shocker {
+                        api: &self,
                         id: s.id,
                         name: s.name,
                     })
@@ -56,6 +79,41 @@ impl OpenShockAPI {
 
         Ok(hubs)
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum CreateApiError {
+    #[error("Error setting up http client")]
+    ContactingApi(#[from] reqwest::Error),
+    #[error("Provided user agent can not be a header value")]
+    InvalidUserAgent(InvalidHeaderValue),
+    #[error("Incorrect Api token")]
+    IncorrectApiToken(InvalidHeaderValue),
+}
+
+fn client(user_agent: &str, api_key: &str) -> Result<Client, CreateApiError> {
+    use CreateApiError as E;
+
+    let mut headers = header::HeaderMap::new();
+    headers.insert(
+        "Content-type",
+        header::HeaderValue::from_static("application/json"),
+    );
+    headers.insert(
+        "accept",
+        header::HeaderValue::from_static("application/json"),
+    );
+    headers.insert(
+        header::USER_AGENT,
+        header::HeaderValue::from_str(user_agent).map_err(E::InvalidUserAgent)?,
+    );
+    headers.insert(
+        "OpenShockToken",
+        header::HeaderValue::from_str(api_key).map_err(E::IncorrectApiToken)?,
+    );
+    Ok(reqwest::Client::builder()
+        .default_headers(headers)
+        .build()?)
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -68,61 +126,46 @@ pub enum ListError {
     Decoding(#[from] serde_json::Error),
 }
 
-pub struct Hub {
+pub struct Hub<'a> {
+    _api: &'a OpenShockAPI,
     name: String,
-    shockers: Vec<Shocker>,
+    shockers: Vec<Shocker<'a>>,
 }
 
-impl Hub {
+impl<'a> Hub<'a> {
     pub fn name(&self) -> &str {
         &self.name
     }
-    pub fn shockers(&self) -> &[Shocker] {
+    pub fn shockers(&self) -> &[Shocker<'a>] {
         &self.shockers
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Shocker {
+pub struct Shocker<'a> {
+    api: &'a OpenShockAPI,
     id: String,
     name: Option<String>,
 }
 
-impl Shocker {
+impl<'a> Shocker<'a> {
     pub fn name(&self) -> Option<&str> {
         self.name.as_deref()
     }
 
-    pub async fn shock(
-        &self,
-        api: &mut OpenShockAPI,
-        intensity: u8,
-        duration: Duration,
-    ) -> Result<(), ControlError> {
-        self.control(api, "Shock", intensity, duration).await
+    pub async fn shock(&self, intensity: u8, duration: Duration) -> Result<(), ControlError> {
+        self.control("Shock", intensity, duration).await
     }
 
-    pub async fn beep(
-        &self,
-        api: &mut OpenShockAPI,
-        intensity: u8,
-        duration: Duration,
-    ) -> Result<(), ControlError> {
-        self.control(api, "Sound", intensity, duration).await
+    pub async fn beep(&self, intensity: u8, duration: Duration) -> Result<(), ControlError> {
+        self.control("Sound", intensity, duration).await
     }
 
-    pub async fn vibrate(
-        &self,
-        api: &mut OpenShockAPI,
-        intensity: u8,
-        duration: Duration,
-    ) -> Result<(), ControlError> {
-        self.control(api, "Vibrate", intensity, duration).await
+    pub async fn vibrate(&self, intensity: u8, duration: Duration) -> Result<(), ControlError> {
+        self.control("Vibrate", intensity, duration).await
     }
 
     async fn control(
         &self,
-        api: &mut OpenShockAPI,
         control_type: &str,
         intensity: u8,
         duration: Duration,
@@ -147,12 +190,13 @@ impl Shocker {
                     "exclusive": true,
                 }
             ],
-            "custom_name": api.user_agent,
+            "custom_name": self.api.user_agent,
         });
 
-        let resp = api
+        let resp = self
+            .api
             .client
-            .post(format!("{}/2/shockers/control", api.base_url))
+            .post(format!("{}/2/shockers/control", self.api.base_url))
             .json(&control_request)
             .send()
             .await?
@@ -180,7 +224,7 @@ pub enum ControlError {
     IntensityOutOfRange,
     #[error("Server replied with unknown acknowledge: {0:?}")]
     UnexpectedServerReply(Option<String>),
-    #[error("Error talking to openshock api server")]
+    #[error("Error talking to OpenShock API server, is the API key correct?")]
     ContactingApi(#[from] reqwest::Error),
     #[error("Could not deserialize server reply")]
     Decoding(#[from] serde_json::Error),
