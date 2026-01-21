@@ -30,4 +30,4 @@
 
 mod api;
 mod data_type;
-pub use api::{OpenShockAPI, ControlError};
+pub use api::{OpenShockAPI, Shocker, Hub, ControlError, CreateApiError, ListError};
