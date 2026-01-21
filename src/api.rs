@@ -136,6 +136,7 @@ pub enum ListError {
     Decoding(#[from] serde_json::Error),
 }
 
+#[derive(Debug, Clone)]
 pub struct Hub {
     name: String,
     shockers: Vec<Shocker>,
@@ -150,6 +151,7 @@ impl Hub {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Shocker {
     api: rc::Weak<Inner>,
     id: String,
