@@ -38,36 +38,6 @@ pub struct BaseResponse<T> {
     pub data: Option<T>,
 }
 
-#[derive(EnumString, Serialize, Deserialize, Debug, Clone, Copy, Eq, PartialEq)]
-pub enum ControlType {
-    Stop,
-    Shock,
-    Vibrate,
-    Sound,
-}
-
-/// The format of which outgoing control requests should be formatted as can send multiple shocks at the same time as long as they use the same API key
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct ControlRequest {
-    pub shocks: Vec<Shock>,
-    pub custom_name: String,
-}
-
-/// Describes how the shock should to send to the device
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct Shock {
-    pub id: String,
-    #[serde(rename = "type")]
-    pub control_type: ControlType,
-    /// minimum of 1 and maximum of 100, measured in percentage
-    pub intensity: u8,
-    /// minimum of 300 and maximum of 30000, measured in ms
-    pub duration: u16,
-    pub exclusive: bool,
-}
-
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct SelfResponse {
